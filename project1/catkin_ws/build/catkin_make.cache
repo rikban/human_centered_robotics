@@ -1,0 +1,2 @@
+p1_d2_t3
+-DCATKIN_DEVEL_PREFIX=/home/hcr-student/hcr/human_centered_robotics/project1/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/home/hcr-student/hcr/human_centered_robotics/project1/catkin_ws/install -G Unix Makefiles
