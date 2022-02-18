@@ -1,8 +1,0 @@
-prefix=/home/hcr-student/hcr/human_centered_robotics/project1/catkin_ws/install
-
-Name: p1_d2_t3
-Description: Description of p1_d2_t3
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

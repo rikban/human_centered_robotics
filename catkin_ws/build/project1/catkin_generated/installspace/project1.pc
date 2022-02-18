@@ -1,0 +1,8 @@
+prefix=/home/hcr-student/hcr/human_centered_robotics/catkin_ws/install
+
+Name: project1
+Description: Description of project1
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lproject1
+Requires: roscpp rospy std_msgs
