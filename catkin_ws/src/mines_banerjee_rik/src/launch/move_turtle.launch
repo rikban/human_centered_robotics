@@ -3,6 +3,6 @@
 type="turtlesim_node" />
 <!-- <node name="turtlesim_manual_controller" pkg="turtlesim"
 type="turtle_teleop_key" /> -->
-<node name="move_turtle" pkg="project1" type="move_turtle"
+<node name="move_turtle" pkg="mines_banerjee_rik" type="move_turtle"
 output="screen" />
 </launch>
