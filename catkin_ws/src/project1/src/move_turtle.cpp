@@ -1,14 +1,8 @@
 #include "ros/ros.h"
 #include "geometry_msgs/Twist.h"
 #include "turtlesim/Pose.h"
-
+#include <std_srvs/Empty.h>
 #include <math.h>
-
-// Topic messages callback
-/* void poseCallback(const turtlesim::PoseConstPtr& msg)
-{
-    ROS_INFO("x: %.2f, y: %.2f, rot: %.2f", msg->x, msg->y, msg->);
-} */
 
 struct pose
 {
@@ -51,7 +45,7 @@ float errorBetweenCurrentAndGoalPose(pose current_pose, pose goal_pose)
 }
 float calculateLinearVelocity(float pose_error)
 {
-    float proportional_linear_gain = 0.5;
+    float proportional_linear_gain = 0.6;
     return proportional_linear_gain*pose_error;
 }
 
@@ -64,18 +58,36 @@ int main(int argc, char **argv)
 {
    // const double FORWARD_SPEED_MPS = 0.5;
     // Define trajectory points
-    const int num_trajectory_points = 5;
+    const int num_trajectory_points = 25;
     int goal_point = 0;
-/*     std::array<pose, num_trajectory_points>goal = {{1,1, M_PI/2},
-                                                    {1,5, 0},
-                                                    {5,5, -M_PI/2},
-                                                    {5,1, -M_PI},
-                                                    {1,1, M_PI/2}}; */
-    pose goal[5] = {{1,1, M_PI/2},
-                    {1,5, 0},
-                    {5,5, -M_PI/2},
-                    {5,1, -M_PI},
-                    {1,1, M_PI/2}};
+    // Trajectory points received from vertex collection effort in OpenCV. Python script is included with package.
+    pose goal[num_trajectory_points] =
+                    {{1.28, 1.39, M_PI/2},  // 0
+                    {1.28, 2.71, 0},        // 1
+                    {1.75, 2.71, 0},        // 2
+                    {1.75, 8.49, 0},        // 3
+                    {1.28, 8.49, 0},        // 4
+                    {1.28, 9.66, 0},        // 5
+                    {3.01, 9.66, 0},        // 6       
+                    {5.34, 6.18, 0},        // 7
+                    {7.45, 9.66, 0},        // 8
+                    {9.20, 9.66, 0},        // 9
+                    {9.20, 8.49, 0},        // 10
+                    {8.61, 8.49, 0},        // 11
+                    {8.61, 2.71, 0},        // 12
+                    {9.20, 2.71, 0},        // 13
+                    {9.20, 1.39, 0},        // 14
+                    {6.90, 1.39, 0},        // 15
+                    {6.90, 2.71, 0},        // 16
+                    {7.45, 2.71, 0},        // 17
+                    {7.45, 7.41, 0},        // 18
+                    {5.34, 3.51, 0},        // 19
+                    {3.01, 7.41, 0},        // 20
+                    {3.01, 2.71, 0},        // 21
+                    {3.77, 2.71, 0},        // 22
+                    {3.77, 1.39, 0},        // 23
+                    {1.28, 1.39, 0},        // 24                    
+                    };     
 
    // Turtle fred;
     // Initialize the node
@@ -83,6 +95,7 @@ int main(int argc, char **argv)
     ros::NodeHandle node;
     // A publisher for the movement data
     ros::Publisher pub = node.advertise<geometry_msgs::Twist>("turtle1/cmd_vel", 10);
+    //ros::ServiceServer service = node.advertiseService("turtle1/set_pen", turtlesim);
     // A listener for pose
     
 
@@ -95,6 +108,14 @@ int main(int argc, char **argv)
     ros::Rate rate(10);
     ROS_INFO("Starting to move forward");
     ros::Subscriber sub = node.subscribe("/turtle1/pose", 100, poseCallback);
+    //ros::ServiceServer service = node.advertiseService();
+    ros::service::waitForService("clear");  //this is optional
+
+    // Get turtlesim to pick up the new parameter values.
+    ros::ServiceClient clearClient
+        = node.serviceClient<std_srvs::Empty>("/clear");
+    std_srvs::Empty srv;
+    
 
     uint8_t counter = 0;
     while(ros::ok() && (goal_point < num_trajectory_points))
@@ -106,7 +127,7 @@ int main(int argc, char **argv)
         float orientation_error = M_PI/2;
         std::cout<< "Goal point: (" << goal[goal_point].x <<", "<< goal[goal_point].y<<")"<<std::endl;
 
-        while(pose_error > 0.01)
+        while(pose_error > 0.09)
         {
             float desired_heading = atan2(( goal[goal_point].y - current_turtle_pose.y),
                                          ( goal[goal_point].x - current_turtle_pose.x));
@@ -114,7 +135,7 @@ int main(int argc, char **argv)
             ROS_INFO("Desired Heading: %.2f", desired_heading);
             //(M_PI + atan2(goal[goal_point].y, goal[goal_point].x));
           
-            while(abs(orientation_error) > 0.01 )
+            while(abs(orientation_error) > 0.09)
             {
 
                 float desired_heading = atan2(-(current_turtle_pose.y - goal[goal_point].y),
@@ -134,14 +155,10 @@ int main(int argc, char **argv)
                 ros::spinOnce();
                 rate.sleep();
             }
-            //std::cout<< "I'm oriented and headed to the next trajectory point!!"<< std::endl;
+
             pose_error = errorBetweenCurrentAndGoalPose(current_turtle_pose, goal[goal_point]);
             
-            //ROS_INFO("Pose error: %.2f", pose_error);
-           //  std::cout<< "Fred thinks he's at: "<< current_turtle_pose.x<< ", "
-           //          <<current_turtle_pose.y<<", "<< current_turtle_pose.orientation<<std::endl;
 
-            //velocity_command.linear.x = calculateLinearVelocity(pose_error);
             velocity_command.linear.x = calculateLinearVelocity(pose_error);
             velocity_command.linear.y = 0.0;
             velocity_command.linear.z = 0.0;
@@ -168,7 +185,7 @@ int main(int argc, char **argv)
         rate.sleep();
         if (goal_point == 0)
         {
-
+            clearClient.call(srv);
         }
         ++goal_point;
         pose_error = errorBetweenCurrentAndGoalPose(current_turtle_pose, goal[goal_point]);

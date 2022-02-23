@@ -13,6 +13,8 @@ geometry_msgs/Twist.h
 /home/hcr-student/hcr/human_centered_robotics/catkin_ws/src/project1/src/geometry_msgs/Twist.h
 turtlesim/Pose.h
 /home/hcr-student/hcr/human_centered_robotics/catkin_ws/src/project1/src/turtlesim/Pose.h
+std_srvs/Empty.h
+-
 math.h
 -
 
@@ -697,6 +699,46 @@ ros/forwards.h
 /opt/ros/melodic/include/ros/ros/forwards.h
 
 /opt/ros/melodic/include/rosconsole/macros_generated.h
+
+/opt/ros/melodic/include/std_srvs/Empty.h
+ros/service_traits.h
+-
+std_srvs/EmptyRequest.h
+-
+std_srvs/EmptyResponse.h
+-
+
+/opt/ros/melodic/include/std_srvs/EmptyRequest.h
+string
+-
+vector
+-
+map
+-
+ros/types.h
+-
+ros/serialization.h
+-
+ros/builtin_message_traits.h
+-
+ros/message_operations.h
+-
+
+/opt/ros/melodic/include/std_srvs/EmptyResponse.h
+string
+-
+vector
+-
+map
+-
+ros/types.h
+-
+ros/serialization.h
+-
+ros/builtin_message_traits.h
+-
+ros/message_operations.h
+-
 
 /opt/ros/melodic/include/turtlesim/Pose.h
 string
