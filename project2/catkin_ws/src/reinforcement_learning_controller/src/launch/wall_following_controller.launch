@@ -1,0 +1,5 @@
+<launch>
+<include file="$(find stingray_sim)/wall_following_v1.launch"/>
+<node name="talker.py" pkg="reinforcement_learning_controller" type="move_turtle"
+output="screen" />
+</launch>

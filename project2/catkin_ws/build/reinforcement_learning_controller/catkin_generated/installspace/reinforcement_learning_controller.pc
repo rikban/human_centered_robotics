@@ -1,0 +1,8 @@
+prefix=/home/hcr-student/hcr/human_centered_robotics/project2/catkin_ws/install
+
+Name: reinforcement_learning_controller
+Description: Description of reinforcement_learning_controller
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 
