@@ -7,6 +7,7 @@ from gazebo_msgs.msg import ModelState
 from gazebo_msgs.srv import SetModelState
 from sensor_msgs.msg import LaserScan
 import numpy as np
+import collections
 import pprint
 import pickle
 np.set_printoptions(precision=3)
@@ -24,16 +25,28 @@ def goForward():
     pose_msg.theta = 0  
 
 
-def turnLeft():
+def turnSharpLeft():
     pose_msg.x = 0.15
     pose_msg.y = 0
-    pose_msg.theta = np.pi/5
+    pose_msg.theta = np.pi/3
 
-
-def turnRight():
+def turnSharpRight():
     pose_msg.x = 0.15
     pose_msg.y = 0
-    pose_msg.theta = -np.pi/5
+    pose_msg.theta = -np.pi/3
+
+def turnGentleLeft():
+    pose_msg.x = 0.15
+    pose_msg.y = 0
+    pose_msg.theta = np.pi/9
+
+def turnGentleRight():
+    pose_msg.x = 0.15
+    pose_msg.y = 0
+    pose_msg.theta = -np.pi/9
+
+
+
 
 
 def rangeRegionCollector(lidar_data): 
@@ -44,21 +57,36 @@ def rangeRegionCollector(lidar_data):
     # Right region is defined as the beams  between 11*num_beams/16 and 13*num_beams/16
     right_beams = np.zeros(0,float)
 
-    # Collect the front and right beams
+    corner_beams = np.zeros(0,float)
+
+    left_beams = np.zeros(0,float)
+
+    # Collect the front, right, right corner, and front beams
     for i in range(num_beams):      
        if (i <= (num_beams/16)) or (i >= (15*num_beams/16)): # Front region
            front_beams = np.append(front_beams, lidar_data.ranges[i])
 
-       elif (i >= (11 * num_beams / 16)) and (i < (13 * num_beams / 16)) : # Right region
+       elif (i >= (2 * num_beams / 16)) and (i < (7 * num_beams / 16)) : # Left region
+           left_beams = np.append(left_beams, lidar_data.ranges[i])
+
+       elif (i >= (10 * num_beams / 16)) and (i < (14 * num_beams / 16)) : # Right region
            right_beams = np.append(right_beams, lidar_data.ranges[i])
+
+           if (i >= (12 * num_beams / 16)) and (i < (14 * num_beams / 16)) : # Corner region
+                corner_beams = np.append(corner_beams, lidar_data.ranges[i])
         
+       
 
     # Determine the shortest distance within the fov          
     global front_ofa
     global right_ofa
+    global corner_ofa
+    global left_ofa
     global personal_space_radius
     front_ofa = np.amin(front_beams)
     right_ofa = np.amin(right_beams)
+    left_ofa = np.amin(left_beams)
+    corner_ofa = np.amin(corner_beams)
     personal_space_radius = np.amin(lidar_data.ranges)
     # Output position to terminal
     # print("Min front is: ", np.round(front_ofa, 2), ", Min right is: ", np.round(right_ofa, 2))
@@ -67,17 +95,24 @@ def rangeRegionCollector(lidar_data):
     
 
 def actionSelectionUsingQTable(state):
+
     action_row = Q_table[state]
     action = action_row.index(max(action_row))
     if action == 0:
         print("Go forward")
         goForward()
     elif action == 1:
-        print("Turning left")
-        turnLeft()
+        print("Hardly turning left")
+        turnGentleLeft()
     elif action == 2:
-        print("Turning right")
-        turnRight()
+        print("Hardly turning right")
+        turnGentleRight()
+    elif action == 3:
+        print("Turning left hardly")
+        turnSharpLeft()
+    elif action == 4:
+        print("Turning right hardly")
+        turnSharpRight()
     return action
 
 def selectRandomAction():
@@ -85,31 +120,41 @@ def selectRandomAction():
     r = np.random.uniform(low=0.0,high=1.0)
     action = 0
 
-    if r <= (1.0/3.0):
+    if r <= (1.0/5.0):
         print("Go forward")
         goForward()
         action = 0
 
-    elif r > 1.0/3.0 and r <= 2.0/3.0:
-        print("Turning left")
-        turnLeft()
+    elif r > 1.0/5.0 and r <= 2.0/5.0:
+        print("Hardly turning left")
+        turnGentleLeft()
         action = 1
 
-    else:
-        print("Turning right")
-        turnRight()
+    elif r > 2.0/5.0 and r <= 3.0/5.0:
+        print("Hardly turning right")
+        turnGentleRight()
         action = 2
+
+    elif r > 3.0/5.0 and r <= 4.0/5.0:
+        print("Turning left hardly")
+        turnSharpLeft()
+        action = 3
+
+    elif r > 4.0/5.0 and r <= 5.0/5.0:
+        print("Turning right hardly")
+        turnSharpRight()
+        action = 4
 
     return action
 
 
 def selectActionUsingEpsGreedyPolicy(state, episode_number):
 
-
-
     # Define parameters
     epsilon_0 = 0.9
     d = 0.985
+
+
 
     # Generate random number
     r = np.random.uniform(low=0.0,high=1.0)
@@ -128,142 +173,155 @@ def selectActionUsingEpsGreedyPolicy(state, episode_number):
 
 
    # Used for Deliverable #1
-def stateEstimator(front_ofa, right_ofa, personal_space_radius):
+def stateEstimator(front_ofa, right_ofa, left_ofa, corner_ofa, personal_space_radius):
    
     # Define states
     # Define front region threshold
-    front_threshold = 0.9
-    front_horizon = 1.8
-    # Define right goldilocks threshld start and end, as well as a horizon threshold
-    right_goldilocks_begin = 0.7
-    right_goldilocks_end = 0.8
-    right_horizon = 1.0
-    print("Personal space radius: ", np.round(personal_space_radius, 2))
-    print("Min front is: ", np.round(front_ofa, 2), ", Min right is: ", np.round(right_ofa, 2))
+    front_too_close = 0.3
+    front_close = 0.6
+    front_medium = 1.0
+    
 
+    # Define right goldilocks threshld start and end, as well as a horizon threshold
+    right_too_close = 0.3
+    right_close = 0.6
+    right_medium = 0.7
+    right_far = 0.8
+
+
+    # Define corner threshold
+    corner_threshold = 1.5
+    left_threshold = 0.3
+
+    state = 'abort'
+    #print("Personal space radius: ", np.round(personal_space_radius, 2))
+    print("R, C, F, L: ", np.round(right_ofa, 2), np.round(corner_ofa, 2), np.round(front_ofa, 2), np.round(left_ofa, 2))
+    
     # Set state
     if personal_space_radius < 0.15 or math.isinf(abs(front_ofa)) or math.isinf(abs(right_ofa)):
-        state = 'm' # Abort state
+        state = 'abort' # Abort state
+    else:
+        if right_ofa <= right_too_close:  # State 1000 series
+            right_state = 1
+        elif (right_ofa > right_too_close) and (right_ofa <= right_close): # State 2000
+            right_state = 2
+        elif (right_ofa > right_close) and (right_ofa <= right_medium): #State 3000 
+            right_state = 3
+        elif (right_ofa > right_medium) and right_ofa <= right_far: # State 4000 and Reward state!
+            right_state = 4
+        elif (right_ofa > right_far): # State 5000
+            right_state = 5
+     
+
+        if corner_ofa < corner_threshold: # State 100
+            corner_state = 1
+        elif corner_ofa >= corner_threshold: ## State 200
+            corner_state = 2 
+
+        if front_ofa <= front_too_close: # State 10
+            front_state = 1
+        elif front_ofa > front_too_close and front_ofa <= front_close: # State 20
+            front_state = 2
+        elif front_ofa > front_close and front_ofa <= front_medium: # State 30
+            front_state = 3
+        elif front_ofa > front_medium: # State 40
+            front_state = 4
         
-    else: # If not crashed
-        if (front_ofa < front_threshold): # State 21
-            if (right_ofa < right_goldilocks_begin): # State 11
-                state = 'a'
-                #print("Updating to state A")
-            elif (right_ofa > right_goldilocks_begin) and (right_ofa < right_goldilocks_end): # State 12
-                state = 'd'
-            elif (right_ofa > right_goldilocks_end) and (right_ofa < right_horizon): # State 13
-                state = 'g'
-            elif (right_ofa > right_horizon): # State 14
-                state = 'j'
-        elif (front_ofa > front_threshold) and (front_ofa < front_horizon): # State 22
-            if (right_ofa < right_goldilocks_begin): # State 11
-                state = 'b'
-            elif (right_ofa > right_goldilocks_begin) and (right_ofa < right_goldilocks_end): # State 12
-                state = 'e'
-            elif (right_ofa > right_goldilocks_end) and (right_ofa < right_horizon): # State 13
-                state = 'h'
-            elif (right_ofa > right_horizon): # State 14
-                state = 'k'
-        elif (front_ofa > front_horizon): # State 23
-            if (right_ofa < right_goldilocks_begin): # State 11
-                state = 'c'
-            elif (right_ofa > right_goldilocks_begin) and (right_ofa < right_goldilocks_end): # State 12
-                state = 'f'
-            elif (right_ofa > right_goldilocks_end) and (right_ofa < right_horizon): # State 13
-                state = 'i'
-            elif (right_ofa > right_horizon): # State 14
-                state = 'l'
-    
+        if left_ofa < left_threshold:
+            left_state = 1
+        else:
+            left_state = 2
+
+        # Combine states
+        state = str(1000*right_state + 100*corner_state + 10*front_state + 1*left_state)
+
     return state
 
 
 def calculateReward(state, action):
-    if state == 'e' or state == 'f': # Goldilocks right/ Front far and medium
-        reward = 25
-
-    elif state == 'd': # Goldilocks right/ Front too close
-        reward = 5
     
-    elif state == 'b' or state == 'c': # Too close right / Front far and medium
-        reward = 5
+    reward = -1
 
-    elif state == 'a': # Too close right / Too close front
-        reward = -3
+    if state[0] == '4' and state[2] != '1':
+        reward = 0
+
+    elif state == 'abort':
+        reward = -2
     
-    elif state == 'h' or state == 'i': # Too far right / Front far and medium
-        reward = 5
-    
-    elif state == 'g': # Too far right / Too close front
-        reward = -1
-
-    elif state == 'j' or state == 'k': # Too far right / Front close and medium
-        reward = 1
-
-    elif state == 'l': # In the middle of nowhere
-        reward = -1
-
-    elif state == 'm':
-        reward = -5
-
-    else:
-        reward = -1
         
+    print("Getting reward of ", reward)
     return reward
 
 
 def updateQTableUsingQLearning(Q_table, state, action, previous_state):
     # Define parameters
-    alpha = 0.2
     gamma = 0.8
     reward = calculateReward(state, action)
-    # print("state: ", state)
-    # print("action: ", action)
-    # print('F,L,R: ', type(Q_table[state][action]))
-    # print("Reward: ", reward)
-    previous_q_table_entry = Q_table[previous_state][action]
-    Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
-    print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
+    global episode_number
+    alpha = 0.2
+    # Check if this state has been observed before
+    # If yes, update the table
+    # If not, append to the dictionary
+    if state in Q_table:
+        print("State found: Updating Q_table")
+        previous_q_table_entry = Q_table[previous_state][action]
+        Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
+        print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
+    else:
+        print("New state observed, appending ", state, " to Q table")
+        Q_table[state] = [0.0, 0.0, 0.0, 0.0, 0.0] # Forward, Gentle left, Gentle right, Sharp left, Sharp right
+       
 
+    # previous_q_table_entry = Q_table[previous_state][action]
+    # Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
+    # print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
+
+
+def updateQTableUsingSARSA(Q_table, state, action, previous_state, previous_action):
+    # Define parameters
+    gamma = 0.8
+    reward = calculateReward(state, action)
+    global episode_number
+    alpha = 0.3
+    # Check if this state has been observed before
+    # If yes, update the table
+    # If not, append to the dictionary
+    if state in Q_table:
+        print("State found: Updating Q_table")
+        previous_q_table_entry = Q_table[previous_state][previous_action]
+        Q_table[previous_state][previous_action] = Q_table[state][action] + alpha*(reward + (gamma*(Q_table[state][action])) - Q_table[previous_state][previous_action])
+        print("Training Residual: ", (Q_table[previous_state][previous_action] - previous_q_table_entry))
+    else:
+        print("New state observed, appending ", state, " to Q table")
+        Q_table[state] = [0.0, 0.0, 0.0, 0.0, 0.0] # Forward, Gentle left, Gentle right, Sharp left, Sharp right
 
 
 
 if __name__ == '__main__':
 
     pose_msg = Pose2D()
-    # Start from scratch
-#     Q_table = {
-#     'a' : [0,0,0],
-#     'b' : [0,0,0],
-#     'c' : [0,0,0],
-#     'd' : [0,0,0],
-#     'e' : [0,0,0],
-#     'f' : [0,0,0],
-#     'g' : [0,0,0],
-#     'h' : [0,0,0],
-#     'i' : [0,0,0],
-#     'j' : [0,0,0],
-#     'k' : [0,0,0],
-#     'l' : [0,0,0],
-#     'm' : [0,0,0]
-# }
-    # Re-initialize Q-Table from saved state
-     
-    with open('Q_learning_saved_state.pickle', 'rb') as handle:
-        Q_table = pickle.load(handle)
     # Global state variable
-    previous_state = 'm'
-    state = 'm' # Initialized to abort state
-
-    # Episode number
-    #episode_number = 0 # From scratch
-
-    with open('episode_number_saved_state.pickle', 'rb') as handle:
-        episode_number = pickle.load(handle)
-
+    previous_state = 'abort'
+    state = 'abort' # Initialized to abort state
     front_ofa = 0.0
     right_ofa = 0.0
+    left_ofa = 0.0
+    corner_ofa = 0.0
     personal_space_radius = 0.0
+
+    # Start from scratch
+    #Q_table = {}
+
+#     # Episode number
+    #episode_number = 0 # From scratch
+
+    # Re-initialize Q-Table from saved state
+     
+    with open('Q_learning_saved_state_highLR.pickle', 'rb') as handle:
+        Q_table = pickle.load(handle)
+    with open('episode_number_saved_state_highLR.pickle', 'rb') as handle:
+        episode_number = pickle.load(handle)
+
 
     # Instantiate the publisher and initialize the node
     pub = rospy.Publisher('/triton_lidar/vel_cmd', Pose2D, queue_size=10)
@@ -272,21 +330,18 @@ if __name__ == '__main__':
    
 
     rospy.init_node('wall_following_controller', anonymous=True)
-    rate = rospy.Rate(5) # 5hz
+    rate = rospy.Rate(3) # 5hz
     rospy.Subscriber('/scan', LaserScan, rangeRegionCollector)
     # Using the Q-Learning reinforcement learning algorithm
     # Initialize the Q-Table
     pp = pprint.PrettyPrinter(indent=4)
-    
+    iteration = 0
+    iteration_deque = collections.deque()
     try:
         while not rospy.is_shutdown():
             # Reinforcement Learning algorithm
-            """ if episode_number == 0 or state == 'm':
-            # Reset robot to random pose
-                random_pose.pose.orientation.z = np.random.uniform(0,2*np.pi)
-                reset_triton.publish(random_pose)
-            else: """
-            previous_state = stateEstimator(front_ofa, right_ofa, personal_space_radius)
+
+            previous_state = stateEstimator(front_ofa, right_ofa, left_ofa, corner_ofa, personal_space_radius)
             print("State returned is: ", previous_state)
                 # Reset robot if crashed
             random_pose = ModelState()
@@ -294,31 +349,40 @@ if __name__ == '__main__':
             random_pose.pose.position.x = np.random.uniform(-3.4, 3.4)
             random_pose.pose.position.y = np.random.uniform(-3.4, 3.4)
             random_pose.pose.orientation.z = np.random.uniform(0,2*np.pi)
+            #print("Random orientation: ", random_pose.pose.orientation.z)
 
-            if previous_state == 'm':
+            if previous_state == 'abort' or iteration == 2000:
                 rospy.wait_for_service('/gazebo/set_model_state')
                 set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
                 resp = set_state(random_pose)
                 episode_number = episode_number + 1
-                print("State M - Resetting")
+                iteration_deque.appendleft(iteration)
+                if len(iteration_deque) > 10:
+                    iteration_deque.pop()
+                iteration = 0
+                print("State Abort - Resetting")
+            
 
+            print("Iteration: ", iteration)
+            print("The last 10 sims have run for ", iteration_deque)
             action = selectActionUsingEpsGreedyPolicy(previous_state, episode_number)
             print("Episode number: ", episode_number)
 
             pub.publish(pose_msg)
+            iteration = iteration + 1
             rate.sleep()
 
             # Observe new state, calculate reward, and update Q table
-            state = stateEstimator(front_ofa, right_ofa, personal_space_radius)
+            state = stateEstimator(front_ofa, right_ofa, left_ofa, corner_ofa, personal_space_radius)
             updateQTableUsingQLearning(Q_table, state=state, action=action, previous_state=previous_state)
             # updateQTableUsingSARSA(Q_table)
-            pp.pprint(Q_table)
+            #pp.pprint(Q_table)
 
              # Store the Q Table
-            if episode_number % 30 == 0:
-                with open('Q_learning_saved_state.pickle', 'wb') as handle:
+            if episode_number % 10 == 0 or iteration == 600:
+                with open('Q_learning_saved_state_highLR.pickle', 'wb') as handle:
                     pickle.dump(Q_table, handle, protocol=pickle.HIGHEST_PROTOCOL)
-                with open('episode_number_saved_state.pickle', 'wb') as handle:
+                with open('episode_number_saved_state_highLR.pickle', 'wb') as handle:
                     pickle.dump(episode_number, handle, protocol=pickle.HIGHEST_PROTOCOL)
                     print("Pickling the Q Table")
 
