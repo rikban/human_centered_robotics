@@ -12,13 +12,6 @@ import pprint
 import pickle
 np.set_printoptions(precision=3)
 
-def loadQTableFromFile():
-    pass
-
-def writeQTableToFile():
-    pass
-
-
 def goForward():
     pose_msg.x = 0.15
     pose_msg.y = 0
@@ -44,8 +37,6 @@ def turnGentleRight():
     pose_msg.x = 0.15
     pose_msg.y = 0
     pose_msg.theta = -np.pi/9
-
-
 
 
 
@@ -154,7 +145,9 @@ def selectActionUsingEpsGreedyPolicy(state, episode_number):
     epsilon_0 = 0.9
     d = 0.985
 
-
+    if state not in Q_table:
+        print("New state observed, appending ", state, " to Q table")
+        Q_table[state] = [0.0, 0.0, 0.0, 0.0, 0.0]  # Forward, Gentle left, Gentle right, Sharp left, Sharp right
 
     # Generate random number
     r = np.random.uniform(low=0.0,high=1.0)
@@ -258,23 +251,13 @@ def updateQTableUsingQLearning(Q_table, state, action, previous_state):
     gamma = 0.8
     reward = calculateReward(state, action)
     global episode_number
+    global accumulated_rewards
     alpha = 0.2
-    # Check if this state has been observed before
-    # If yes, update the table
-    # If not, append to the dictionary
-    if state in Q_table:
-        print("State found: Updating Q_table")
-        previous_q_table_entry = Q_table[previous_state][action]
-        Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
-        print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
-    else:
-        print("New state observed, appending ", state, " to Q table")
-        Q_table[state] = [0.0, 0.0, 0.0, 0.0, 0.0] # Forward, Gentle left, Gentle right, Sharp left, Sharp right
-       
 
-    # previous_q_table_entry = Q_table[previous_state][action]
-    # Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
-    # print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
+    previous_q_table_entry = Q_table[previous_state][action]
+    Q_table[previous_state][action] = Q_table[previous_state][action] + alpha*(reward + (gamma*max(Q_table[state])) - Q_table[previous_state][action])
+    print("Training Residual: ", (Q_table[previous_state][action] - previous_q_table_entry))
+    accumulated_rewards = accumulated_rewards + reward
 
 
 def updateQTableUsingSARSA(Q_table, state, action, previous_state, previous_action):
@@ -283,18 +266,10 @@ def updateQTableUsingSARSA(Q_table, state, action, previous_state, previous_acti
     reward = calculateReward(state, action)
     global episode_number
     alpha = 0.3
-    # Check if this state has been observed before
-    # If yes, update the table
-    # If not, append to the dictionary
-    if state in Q_table:
-        print("State found: Updating Q_table")
-        previous_q_table_entry = Q_table[previous_state][previous_action]
-        Q_table[previous_state][previous_action] = Q_table[state][action] + alpha*(reward + (gamma*(Q_table[state][action])) - Q_table[previous_state][previous_action])
-        print("Training Residual: ", (Q_table[previous_state][previous_action] - previous_q_table_entry))
-    else:
-        print("New state observed, appending ", state, " to Q table")
-        Q_table[state] = [0.0, 0.0, 0.0, 0.0, 0.0] # Forward, Gentle left, Gentle right, Sharp left, Sharp right
 
+    previous_q_table_entry = Q_table[previous_state][previous_action]
+    Q_table[previous_state][previous_action] = Q_table[state][action] + alpha*(reward + (gamma*(Q_table[state][action])) - Q_table[previous_state][previous_action])
+    print("Training Residual: ", (Q_table[previous_state][previous_action] - previous_q_table_entry))
 
 
 if __name__ == '__main__':
@@ -337,6 +312,8 @@ if __name__ == '__main__':
     pp = pprint.PrettyPrinter(indent=4)
     iteration = 0
     iteration_deque = collections.deque()
+    accumulated_rewards_deque = collections.deque()
+    accumulated_rewards = 0.0
     try:
         while not rospy.is_shutdown():
             # Reinforcement Learning algorithm
@@ -350,15 +327,23 @@ if __name__ == '__main__':
             random_pose.pose.position.y = np.random.uniform(-3.4, 3.4)
             random_pose.pose.orientation.z = np.random.uniform(0,2*np.pi)
             #print("Random orientation: ", random_pose.pose.orientation.z)
+            
 
-            if previous_state == 'abort' or iteration == 2000:
+
+            if (previous_state == 'abort' and iteration != 1) or iteration == 2000:
                 rospy.wait_for_service('/gazebo/set_model_state')
                 set_state = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
                 resp = set_state(random_pose)
                 episode_number = episode_number + 1
                 iteration_deque.appendleft(iteration)
+                iteration_deque.appendleft(iteration)
+                accumulated_rewards_deque.appendleft(float(accumulated_rewards) / float(iteration+1))
+                with open('QLearning_training_metric1.pickle', 'wb') as handle:
+                    pickle.dump(accumulated_rewards_deque, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 if len(iteration_deque) > 10:
                     iteration_deque.pop()
+
+                accumulated_rewards = 0
                 iteration = 0
                 print("State Abort - Resetting")
             
@@ -370,6 +355,7 @@ if __name__ == '__main__':
 
             pub.publish(pose_msg)
             iteration = iteration + 1
+            print("Accumulated rewards: ", float(accumulated_rewards) / float(iteration))
             rate.sleep()
 
             # Observe new state, calculate reward, and update Q table
